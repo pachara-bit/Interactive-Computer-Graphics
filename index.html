@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retro Fan Room</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#9ed8ff;font-family:system-ui,"Noto Sans Thai",sans-serif}
+canvas{display:block}
+.panel{position:fixed;z-index:2;color:#fff;background:rgba(20,20,40,.78);border-radius:12px;box-shadow:0 0 0 1px rgba(255,255,255,.25)}
+#hud{top:12px;left:12px;padding:12px 14px;font-size:13px;line-height:1.6;max-width:260px}
+#hud b{color:#ffd54a}
+#val{margin-top:6px;font-family:ui-monospace,monospace;color:#8ff}
+#ui{top:12px;right:12px;display:flex;gap:8px;padding:6px}
+#ui button{border:0;border-radius:8px;padding:8px 12px;font-size:16px;cursor:pointer;color:#fff;background:transparent}
+#ui button:hover{background:rgba(255,255,255,.2)}
+</style>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+</head>
+<body>
+<div id="hud" class="panel">
+  <b>Keyboard Transform</b><br>
+  ← → ↑ ↓ : Translate X / Z<br>
+  PgUp / PgDn : Translate Y<br>
+  Q / E : Rotate Y &nbsp; Z / X : Rotate X<br>
+  + / − : Scale &nbsp; 0 : Reset &nbsp; N : กลางวัน/คืน
+  <div id="val"></div>
+</div>
+<div id="ui" class="panel">
+  <button id="zin" title="ซูมเข้า">＋</button>
+  <button id="zout" title="ซูมออก">－</button>
+  <button id="mode">🌙 กลางคืน</button>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+
+/* ---------- พื้นฐาน ---------- */
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9ed8ff);
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, .1, 100);
+camera.position.set(7.5,5.5,8.5);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0,2,0); controls.enableDamping = true;
+controls.minDistance = 4; controls.maxDistance = 25; controls.maxPolarAngle = Math.PI/2 - .02;
+
+/* ---------- ห้อง ---------- */
+function tex(draw, rx=1, ry=1){
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  draw(c.getContext('2d'));
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx,ry); return t;
+}
+const wallpaper = tex(g=>{ g.fillStyle='#ead6ab'; g.fillRect(0,0,256,256); g.fillStyle='#d6b97c';
+  for (let x=0;x<256;x+=64) g.fillRect(x,0,28,256); }, 3.5, 2);
+const planks = tex(g=>{ g.fillStyle='#8a5a3c'; g.fillRect(0,0,256,256); g.strokeStyle='#5e3a24'; g.lineWidth=3;
+  for (let x=0;x<256;x+=64){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,256); g.stroke(); } }, 3.5, 3.5);
+const rugTex = tex(g=>{ g.fillStyle='#b8322f'; g.fillRect(0,0,256,256);
+  [[120,'#f1e2b6'],[96,'#b8322f'],[70,'#2a6f86'],[44,'#f1e2b6'],[22,'#b8322f']].forEach(([r,c])=>{
+    g.fillStyle=c; g.beginPath(); g.arc(128,128,r,0,7); g.fill(); }); });
+const posterTex = tex(g=>{ const gr=g.createLinearGradient(0,0,0,256);
+  gr.addColorStop(0,'#ff8a3d'); gr.addColorStop(1,'#7a2bd6'); g.fillStyle=gr; g.fillRect(0,0,256,256);
+  g.fillStyle='#fff'; g.font='bold 54px Arial'; g.textAlign='center'; g.fillText('RETRO',128,130);
+  g.font='28px Arial'; g.fillText('FAN CLUB',128,175); });
+
+const lit = (o)=>new THREE.MeshStandardMaterial(o);
+function slab(w,h,d,x,y,z,m){
+  const o = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), m); o.position.set(x,y,z);
+  o.castShadow = o.receiveShadow = true; scene.add(o); return o;
+}
+function plane(w,h,m,x,y,z,ry=0,rx=0){
+  const o = new THREE.Mesh(new THREE.PlaneGeometry(w,h), m); o.position.set(x,y,z);
+  o.rotation.set(rx,ry,0); o.receiveShadow = true; scene.add(o); return o;
+}
+plane(7,7,lit({map:planks,roughness:.7}),0,0,0,0,-Math.PI/2);             // พื้น
+plane(7,5.5,lit({map:wallpaper,roughness:.9}),0,2.75,-3.5);               // ผนังหลัง
+plane(7,5.5,lit({map:wallpaper,roughness:.9}),-3.5,2.75,0,Math.PI/2);     // ผนังซ้าย
+const wood = lit({color:0x5e3a24,roughness:.6});
+slab(7,.25,.12,0,.12,-3.44,wood); slab(.12,.25,7,-3.44,.12,0,wood);       // บัว
+const rug = new THREE.Mesh(new THREE.CircleGeometry(2.4,48).rotateX(-Math.PI/2), lit({map:rugTex,roughness:1}));
+rug.position.y = .01; rug.receiveShadow = true; scene.add(rug);
+
+// หน้าต่าง
+slab(2.8,3.2,.1,1.6,3.3,-3.47,wood);
+const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.4,2.8), new THREE.MeshBasicMaterial({color:0x9ed8ff}));
+pane.position.set(1.6,3.3,-3.4); scene.add(pane);
+slab(2.4,.07,.08,1.6,3.3,-3.38,wood); slab(.07,2.8,.08,1.6,3.3,-3.38,wood);
+// โปสเตอร์
+const poster = plane(2,2.6,new THREE.MeshBasicMaterial({map:posterTex}),-3.46,3.2,0.5,Math.PI/2);
+// โคมไฟตั้งพื้น
+slab(.7,.08,.7,-2.8,.04,-2.8,wood);
+const pole = new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,3.4,12), lit({color:0x333333,metalness:.6}));
+pole.position.set(-2.8,1.7,-2.8); scene.add(pole);
+const shadeMat = new THREE.MeshBasicMaterial({color:0xffc27a, side:THREE.DoubleSide});
+const shade = new THREE.Mesh(new THREE.CylinderGeometry(.35,.6,.8,24,1,true), shadeMat);
+shade.position.set(-2.8,3.6,-2.8); scene.add(shade);
+
+/* ---------- พัดลม (GLB) ---------- */
+const fan = new THREE.Group(); fan.rotation.order = 'YXZ'; scene.add(fan);
+new GLTFLoader().load('retro-style_desk_fan.glb', gltf=>{
+  const m = gltf.scene, b = new THREE.Box3().setFromObject(m), c = b.getCenter(new THREE.Vector3());
+  m.position.set(-c.x, -b.min.y, -c.z);      // วางฐานให้แตะพื้น กึ่งกลางที่จุดหมุน
+  m.traverse(o=>{ if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+  fan.add(m);
+}, undefined, ()=>{ document.getElementById('val').textContent = '⚠ โหลด retro-style_desk_fan.glb ไม่ได้ (ต้องวางไฟล์ไว้โฟลเดอร์เดียวกัน)'; });
+
+/* ---------- แสง ---------- */
+const hemi = new THREE.HemisphereLight(0xffffff,0x8a6a4a,1); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0d0,3); sun.position.set(6,9,7); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-6,right:6,top:6,bottom:-6,near:1,far:30}); scene.add(sun);
+const lamp = new THREE.PointLight(0xffb15c,0,0,2); lamp.position.set(-2.8,3.4,-2.8);
+lamp.castShadow = true; scene.add(lamp);
+
+/* ---------- กลางวัน / กลางคืน ---------- */
+const C = (h)=>new THREE.Color(h);
+let cur = 0, tgt = 0;     // 0 = กลางวัน (เริ่มต้น), 1 = กลางคืน
+function apply(n){
+  scene.background.copy(C(0x9ed8ff)).lerp(C(0x070816),n);
+  pane.material.color.copy(C(0x9ed8ff)).lerp(C(0x0b1236),n);
+  hemi.color.copy(C(0xffffff)).lerp(C(0x4a5cff),n);
+  hemi.groundColor.copy(C(0x8a6a4a)).lerp(C(0x1a1030),n);
+  hemi.intensity = 1 - .8*n;
+  sun.intensity = 3*(1-n) + .5*n; sun.color.copy(C(0xfff0d0)).lerp(C(0x7f95ff),n);
+  lamp.intensity = 90*n;
+  shadeMat.color.copy(C(0xb89060)).lerp(C(0xffd9a0),n);
+  document.body.style.background = '#' + scene.background.getHexString();
+}
+const modeBtn = document.getElementById('mode');
+function toggle(){ tgt = tgt ? 0 : 1; modeBtn.textContent = tgt ? '☀️ กลางวัน' : '🌙 กลางคืน'; }
+
+/* ---------- Keyboard: Translate / Rotate / Scale ---------- */
+const keys = new Set();
+addEventListener('keydown', e=>{
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','PageUp','PageDown'].includes(e.code)) e.preventDefault();
+  keys.add(e.code);
+  if (e.code === 'KeyN') toggle();
+  if (e.code === 'Digit0' || e.code === 'Numpad0'){ fan.position.set(0,0,0); fan.rotation.set(0,0,0); fan.scale.setScalar(1); }
+});
+addEventListener('keyup', e=>keys.delete(e.code));
+const has = (...c)=>c.some(k=>keys.has(k));
+const clamp = (v,a,b)=>Math.min(b,Math.max(a,v));
+const val = document.getElementById('val'), D = 180/Math.PI;
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(()=>{
+  const dt = clock.getDelta(), sp = 3*dt, rs = 1.8*dt, ss = 1 + 1.2*dt;
+  if (has('ArrowLeft'))  fan.position.x -= sp;   if (has('ArrowRight')) fan.position.x += sp;
+  if (has('ArrowUp'))    fan.position.z -= sp;   if (has('ArrowDown'))  fan.position.z += sp;
+  if (has('PageUp'))     fan.position.y += sp;   if (has('PageDown'))   fan.position.y -= sp;
+  if (has('KeyQ')) fan.rotation.y += rs;         if (has('KeyE')) fan.rotation.y -= rs;
+  if (has('KeyZ')) fan.rotation.x += rs;         if (has('KeyX')) fan.rotation.x -= rs;
+  if (has('Equal','NumpadAdd'))      fan.scale.multiplyScalar(ss);
+  if (has('Minus','NumpadSubtract')) fan.scale.multiplyScalar(1/ss);
+  fan.scale.setScalar(clamp(fan.scale.x,.4,2));
+  fan.position.set(clamp(fan.position.x,-2.7,2.7), clamp(fan.position.y,0,3), clamp(fan.position.z,-2.5,2.7));
+  fan.rotation.x = clamp(fan.rotation.x,-.7,.7);
+  cur += (tgt-cur)*.07; apply(cur);
+  const p = fan.position;
+  if (!val.textContent.startsWith('⚠'))
+    val.textContent = `pos ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}\nrot Y ${(fan.rotation.y*D).toFixed(0)}° X ${(fan.rotation.x*D).toFixed(0)}°  scale ${fan.scale.x.toFixed(2)}`;
+  controls.update();
+  renderer.render(scene,camera);
+});
+val.style.whiteSpace = 'pre';
+
+/* ---------- ปุ่ม UI ---------- */
+function zoom(f){
+  const d = camera.position.clone().sub(controls.target).multiplyScalar(f);
+  d.setLength(clamp(d.length(),controls.minDistance,controls.maxDistance));
+  camera.position.copy(controls.target).add(d);
+}
+zin.onclick = ()=>zoom(.8); zout.onclick = ()=>zoom(1.25); modeBtn.onclick = toggle;
+addEventListener('resize', ()=>{
+  camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
